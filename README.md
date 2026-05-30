@@ -55,3 +55,7 @@ App runs at http://localhost:3000.
 | `npm run db:generate` | Generate new migration from schema  |
 | `npm run db:rollback` | Roll back last migration            |
 | `npm run db:studio`   | Open Drizzle Studio (DB browser)    |
+
+## Architecture decisions (ADRs)
+
+- [ADR-0001 — Rate-limit e hardening de endpoints públicos](docs/adr/0001-rate-limit-and-input-hardening.md)
