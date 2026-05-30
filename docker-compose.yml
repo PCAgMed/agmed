@@ -16,5 +16,21 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build: .
+    container_name: clinica_agenda_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://clinica:password@postgres:5432/clinica_agenda
+      AUTH_URL: http://localhost:3000
+      NODE_ENV: production
+    env_file:
+      - path: .env.local
+        required: false
+    ports:
+      - "3000:3000"
+
 volumes:
   postgres_data:
