@@ -3,13 +3,15 @@ import Credentials from 'next-auth/providers/credentials'
 import { compareSync } from 'bcryptjs'
 // AGM-24: o lookup por e-mail no login é cross-clinic — não temos clínica
 // ativa ANTES de autenticar. Uso legítimo de `dbUnscopedDangerous`. A clínica
-// ativa é resolvida depois pelo middleware do commit C, a partir das
-// memberships do usuário.
+// ativa é resolvida depois pelo middleware do commit D, a partir das
+// memberships do usuário; o claim no JWT é populado pelo endpoint
+// `POST /api/session/active-clinic` (commit C).
 import { dbUnscopedDangerous } from '@/lib/db'
 import { authConfig } from './auth.config'
+import { getActiveMembership } from '@/lib/clinics/membership'
 import { emailDomain, logAuthEvent } from '@/lib/observability/auth-events'
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
+export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
@@ -77,12 +79,38 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   callbacks: {
     ...authConfig.callbacks,
-    jwt({ token, user }) {
-      if (user) token.id = user.id
+    async jwt({ token, user, trigger, session }) {
+      // 1) Sign-in: copia id do usuário pro token. activeClinicId começa null
+      //    e fica null até o cliente chamar `/api/session/active-clinic`.
+      if (user) {
+        token.id = user.id
+        token.activeClinicId = null
+      }
+      // 2) Update trigger: o endpoint chamou `unstable_update({ activeClinicId })`.
+      //    Defesa em profundidade — revalida a membership ANTES de gravar o
+      //    claim, mesmo que o endpoint já tenha validado. Cobre o caso de o
+      //    membership ter sido revogado entre a validação do endpoint e o
+      //    re-emit do JWT, e cobre qualquer caller que pule o endpoint e
+      //    chame `update()` direto do client.
+      if (trigger === 'update' && session && typeof session === 'object') {
+        const candidate = (session as { activeClinicId?: unknown }).activeClinicId
+        if (candidate === null) {
+          token.activeClinicId = null
+        } else if (typeof candidate === 'string' && typeof token.id === 'string') {
+          const membership = await getActiveMembership(token.id, candidate)
+          if (membership) {
+            token.activeClinicId = membership.clinicId
+          }
+          // Membership inválida ⇒ silently drop. Endpoint já fez o check
+          // explícito e respondeu 403; este caminho só protege contra abuso.
+        }
+      }
       return token
     },
     session({ session, token }) {
       if (token.id) session.user.id = token.id as string
+      session.activeClinicId =
+        typeof token.activeClinicId === 'string' ? token.activeClinicId : null
       return session
     },
   },

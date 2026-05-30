@@ -12,6 +12,9 @@ export type AuditAction =
   | 'rights.consent.revoke'
   | 'rights.subprocessors.read'
   | 'rights.denied'
+  // AGM-24 commit C — troca de clínica ativa na sessão. `success` = membership
+  // validada, JWT atualizado. `denied` = sem membership ativa, JWT intacto.
+  | 'session.clinic.switch'
 
 export type AuditOutcome = 'success' | 'denied' | 'error'
 

@@ -67,6 +67,10 @@ export async function withClinicScope<T>(
     throw new ClinicScopeError('withClinicScope: clinicId must be a UUID')
   }
   const client = await internalPool().connect()
+  // Capturado fora do try: precisa sobreviver até o `finally` para que
+  // `client.release(err)` descarte conexões em estado incerto em vez de
+  // devolvê-las ao pool envenenadas. Convenção do `pg`: arg truthy ⇒ destroy.
+  let releaseError: Error | undefined
   try {
     await client.query('BEGIN')
     // 1) Troca para `agenda_app` (NOBYPASSRLS). Sem isso, a role de sessão
@@ -81,11 +85,12 @@ export async function withClinicScope<T>(
     await client.query('COMMIT')
     return result
   } catch (err) {
+    releaseError = err instanceof Error ? err : new Error(String(err))
     // Best-effort rollback; se a conexão já caiu, ignora.
     await client.query('ROLLBACK').catch(() => {})
     throw err
   } finally {
-    client.release()
+    client.release(releaseError)
   }
 }
 
@@ -122,6 +127,7 @@ export async function withRowSecurityOff<T>(
   fn: (tx: PoolClient) => Promise<T>,
 ): Promise<T> {
   const client = await internalPool().connect()
+  let releaseError: Error | undefined
   try {
     await client.query('BEGIN')
     // Defensivo: se a sessão pertencer a uma role NOBYPASSRLS no futuro,
@@ -131,10 +137,11 @@ export async function withRowSecurityOff<T>(
     await client.query('COMMIT')
     return result
   } catch (err) {
+    releaseError = err instanceof Error ? err : new Error(String(err))
     await client.query('ROLLBACK').catch(() => {})
     throw err
   } finally {
-    client.release()
+    client.release(releaseError)
   }
 }
 
