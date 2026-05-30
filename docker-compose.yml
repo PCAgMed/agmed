@@ -26,11 +26,70 @@ services:
       DATABASE_URL: postgresql://clinica:password@postgres:5432/clinica_agenda
       AUTH_URL: http://localhost:3000
       NODE_ENV: production
+      # Observability — uncomment after the `observability` profile is up.
+      # LOKI_URL: http://loki:3100
+      # APP_ENV: staging
     env_file:
       - path: .env.local
         required: false
     ports:
       - "3000:3000"
 
+  # --- Observability stack (AGM-8) ---
+  # Bring up with: docker compose --profile observability up -d
+  # Grafana UI:    http://localhost:3001  (anonymous admin)
+  # Loki API:      http://localhost:3100
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: clinica_agenda_loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3110:3100"
+    volumes:
+      - loki_data:/loki
+    profiles: ["observability"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: clinica_agenda_grafana
+    depends_on:
+      loki:
+        condition: service_healthy
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_USERS_DEFAULT_THEME: "light"
+      GF_LOG_LEVEL: "warn"
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    profiles: ["observability"]
+
+  promtail:
+    # Scrapes Docker container logs and forwards to Loki. Useful once the
+    # `app` service runs in Docker; for `npm run dev` (host node) the app
+    # pushes directly via pino-loki transport (LOKI_URL env var).
+    image: grafana/promtail:3.2.1
+    container_name: clinica_agenda_promtail
+    depends_on:
+      loki:
+        condition: service_healthy
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./observability/promtail/config.yml:/etc/promtail/config.yml:ro
+    profiles: ["observability"]
+
 volumes:
   postgres_data:
+  loki_data:
+  grafana_data:
