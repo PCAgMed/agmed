@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { auth } from '@/auth'
 import { signOut } from '@/auth'
 
@@ -11,6 +12,12 @@ export default async function DashboardPage() {
       <p className="text-sm text-gray-400">
         Logado como <span className="font-medium text-gray-600">{session?.user?.email}</span>
       </p>
+      <Link
+        href="/privacidade"
+        className="text-sm font-medium text-gray-700 underline underline-offset-2 hover:text-gray-900"
+      >
+        Minha privacidade (LGPD)
+      </Link>
       <form
         action={async () => {
           'use server'

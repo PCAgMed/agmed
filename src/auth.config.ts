@@ -15,7 +15,18 @@ export const authConfig: NextAuthConfig = {
       if (isLoggedIn && isPublicPath) {
         return Response.redirect(new URL('/dashboard', nextUrl))
       }
-      if (!isLoggedIn && !isPublicPath) return false
+      if (!isLoggedIn && !isPublicPath) {
+        // For API routes, return a JSON 401 instead of bouncing to /login —
+        // fetch() callers (PrivacyPanel etc.) need a parseable status code,
+        // not an HTML redirect target.
+        if (nextUrl.pathname.startsWith('/api/')) {
+          return Response.json(
+            { error: 'Não autenticado' },
+            { status: 401, headers: { 'cache-control': 'no-store' } },
+          )
+        }
+        return false
+      }
       return true
     },
   },
