@@ -186,6 +186,22 @@ export const PII_TABLES: readonly PiiTableEntry[] = [
     notes:
       'Trilha de auditoria do sweep (AGM-33). Mesma classe da audit_log: accountability operacional sob retenção própria.',
   },
+  {
+    table: 'clinics',
+    retentionClass: 'profissional_active',
+    anchorColumn: 'deleted_at',
+    extraWhere: 'deleted_at IS NOT NULL',
+    notes:
+      'Clínica-controladora (AGM-24). Reaproveita classe `profissional_active` (semântica: participante ativo da plataforma — pessoa física OU jurídica). Soft-delete via `deleted_at` na própria tabela; sweep hard-deleta 30d depois. Quando contrato exigir retenção fiscal própria de PJ, criar classe `controller_active`.',
+  },
+  {
+    table: 'clinic_memberships',
+    retentionClass: 'profissional_active',
+    anchorColumn: 'revoked_at',
+    extraWhere: "status = 'revoked' AND revoked_at IS NOT NULL",
+    notes:
+      'Vínculo profissional ↔ clínica (AGM-24). Status `revoked` mantém histórico até hard-delete em 30d via sweep, compatível com CFM 1.821/2007 (`profissional_offboarded_5y` cobre o dado mínimo do profissional depois disso).',
+  },
 ]
 
 /**

@@ -29,6 +29,13 @@
       "when": 1780157700032,
       "tag": "0003_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780160468959,
+      "tag": "0004_multitenancy",
+      "breakpoints": true
     }
   ]
 }

@@ -56,6 +56,14 @@ describe('retention registry', () => {
     expect(classifyTable('nope_does_not_exist').status).toBe('unclassified')
   })
 
+  it('multi-tenancy tables (AGM-24) carry the right class and anchor', () => {
+    expect(classifyTable('clinics')).toMatchObject({ status: 'pii', retentionClass: 'profissional_active' })
+    expect(classifyTable('clinic_memberships')).toMatchObject({
+      status: 'pii',
+      retentionClass: 'profissional_active',
+    })
+  })
+
   it('isRetentionClass narrows correctly', () => {
     expect(isRetentionClass('prontuario_20y')).toBe(true)
     expect(isRetentionClass('not_a_class')).toBe(false)
