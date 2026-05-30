@@ -27,8 +27,16 @@
 // callsite tem que escolher *qual* das três primitivas usar, e a revisão
 // pré-merge consegue auditar por grep.
 import { Pool, type PoolClient } from 'pg'
+import { childLogger } from '@/lib/observability/logger'
 
 let pool: Pool | undefined
+
+// AGM-24 commit D — LOW-4 do audit SE em [AGM-36](/AGM/issues/AGM-36).
+// Rollback que falha no caminho de erro vira warn estruturado em vez de
+// swallow silencioso. `client.release(releaseError)` no `finally` ainda
+// destrói a conexão, então não é blocker — mas tirar a forense é caro
+// quando estiver diagnosticando conexões mortas em prod.
+const dbLog = childLogger({ component: 'db.scope' })
 
 function internalPool(): Pool {
   if (!pool) {
@@ -86,8 +94,13 @@ export async function withClinicScope<T>(
     return result
   } catch (err) {
     releaseError = err instanceof Error ? err : new Error(String(err))
-    // Best-effort rollback; se a conexão já caiu, ignora.
-    await client.query('ROLLBACK').catch(() => {})
+    // Best-effort rollback; se a conexão já caiu, registra warn pra forense.
+    await client.query('ROLLBACK').catch((rbErr: unknown) => {
+      dbLog.warn(
+        { event: 'db.rollback.failed', scope: 'withClinicScope', err: rbErr },
+        'rollback failed after error; client will be destroyed by release()',
+      )
+    })
     throw err
   } finally {
     client.release(releaseError)
@@ -138,7 +151,12 @@ export async function withRowSecurityOff<T>(
     return result
   } catch (err) {
     releaseError = err instanceof Error ? err : new Error(String(err))
-    await client.query('ROLLBACK').catch(() => {})
+    await client.query('ROLLBACK').catch((rbErr: unknown) => {
+      dbLog.warn(
+        { event: 'db.rollback.failed', scope: 'withRowSecurityOff', err: rbErr },
+        'rollback failed after error; client will be destroyed by release()',
+      )
+    })
     throw err
   } finally {
     client.release(releaseError)

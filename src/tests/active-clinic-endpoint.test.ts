@@ -28,9 +28,28 @@ vi.mock('@/lib/observability/logger', () => ({
   childLogger: () => ({ info: () => {}, warn: () => {}, error: () => {}, debug: () => {} }),
 }))
 
+// AGM-24 commit D — LOW-3 fix: `getActiveMembership` agora roda dentro de
+// `withClinicScope`. O mock simula a transação invocando o callback com um
+// `tx` cuja `query` é o nosso `queryMock`. `ClinicScopeError` é exportado
+// como classe real porque membership.ts faz `instanceof` no catch.
 type QueryFn = (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }>
 const queryMock = vi.fn<QueryFn>(async () => ({ rows: [] }))
-vi.mock('@/lib/db', () => ({ dbUnscopedDangerous: () => ({ query: queryMock }) }))
+
+class FakeClinicScopeError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ClinicScopeError'
+  }
+}
+
+vi.mock('@/lib/db', () => ({
+  dbUnscopedDangerous: () => ({ query: queryMock }),
+  withClinicScope: async (
+    _clinicId: string,
+    fn: (tx: { query: typeof queryMock }) => Promise<unknown>,
+  ) => fn({ query: queryMock }),
+  ClinicScopeError: FakeClinicScopeError,
+}))
 
 const auditMock = vi.fn<(input: unknown) => Promise<void>>(async () => {})
 vi.mock('@/lib/lgpd/audit', () => ({ recordAudit: (input: unknown) => auditMock(input) }))

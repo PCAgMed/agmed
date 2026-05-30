@@ -8,9 +8,17 @@ import { compareSync } from 'bcryptjs'
 // `POST /api/session/active-clinic` (commit C).
 import { dbUnscopedDangerous } from '@/lib/db'
 import { authConfig } from './auth.config'
-import { getActiveMembership } from '@/lib/clinics/membership'
+import { jwtCallback, type JwtCallbackArgs } from '@/lib/auth/jwt-callback'
 import { emailDomain, logAuthEvent } from '@/lib/observability/auth-events'
 
+// TODO(next-auth-upgrade): `unstable_update` é prefixado `unstable_` por
+// design da lib. Cada upgrade de next-auth (5.x → 6.x ou minor instável)
+// pode renomeá-la ou mudar o contrato sem aviso. Re-validar:
+//   1. Ainda existe em `next-auth`?
+//   2. Assinatura `(partialSession) => Promise<Session | null>` se manteve?
+//   3. O callback `jwt({ trigger: 'update', session })` ainda recebe o
+//      payload que passamos aqui?
+// Findings LOW-2 do audit SE em [AGM-36](/AGM/issues/AGM-36).
 export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
   ...authConfig,
   providers: [
@@ -79,34 +87,7 @@ export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
   },
   callbacks: {
     ...authConfig.callbacks,
-    async jwt({ token, user, trigger, session }) {
-      // 1) Sign-in: copia id do usuário pro token. activeClinicId começa null
-      //    e fica null até o cliente chamar `/api/session/active-clinic`.
-      if (user) {
-        token.id = user.id
-        token.activeClinicId = null
-      }
-      // 2) Update trigger: o endpoint chamou `unstable_update({ activeClinicId })`.
-      //    Defesa em profundidade — revalida a membership ANTES de gravar o
-      //    claim, mesmo que o endpoint já tenha validado. Cobre o caso de o
-      //    membership ter sido revogado entre a validação do endpoint e o
-      //    re-emit do JWT, e cobre qualquer caller que pule o endpoint e
-      //    chame `update()` direto do client.
-      if (trigger === 'update' && session && typeof session === 'object') {
-        const candidate = (session as { activeClinicId?: unknown }).activeClinicId
-        if (candidate === null) {
-          token.activeClinicId = null
-        } else if (typeof candidate === 'string' && typeof token.id === 'string') {
-          const membership = await getActiveMembership(token.id, candidate)
-          if (membership) {
-            token.activeClinicId = membership.clinicId
-          }
-          // Membership inválida ⇒ silently drop. Endpoint já fez o check
-          // explícito e respondeu 403; este caminho só protege contra abuso.
-        }
-      }
-      return token
-    },
+    jwt: (args) => jwtCallback(args as JwtCallbackArgs),
     session({ session, token }) {
       if (token.id) session.user.id = token.id as string
       session.activeClinicId =
