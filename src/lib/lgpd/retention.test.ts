@@ -29,7 +29,9 @@ describe('retention registry', () => {
     expect(RETENTION_POLICIES.profissional_active.maxActiveAgeDays).toBeNull()
     expect(RETENTION_POLICIES.profissional_offboarded_5y.maxActiveAgeDays).toBe(5 * 365)
     expect(RETENTION_POLICIES.payment_5y.maxActiveAgeDays).toBe(5 * 365)
-    expect(RETENTION_POLICIES.marketing_consent.maxActiveAgeDays).toBe(2 * 365)
+    // marketing_consent não tem disposal etário — só via revoked_at (extraWhere).
+    // A regra de renovação 2y é UX, não sweep.
+    expect(RETENTION_POLICIES.marketing_consent.maxActiveAgeDays).toBeNull()
     expect(RETENTION_POLICIES.audit_log_10y.maxActiveAgeDays).toBe(10 * 365)
     expect(RETENTION_POLICIES.transient.maxActiveAgeDays).toBe(1)
   })

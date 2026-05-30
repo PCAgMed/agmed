@@ -101,9 +101,8 @@ export const RETENTION_POLICIES: Record<RetentionClass, RetentionPolicy> = {
   marketing_consent: {
     retentionClass: 'marketing_consent',
     description:
-      'Consentimento granular de marketing (Art. 11 II g). Eliminação imediata ao revogar; renovação obrigatória a cada 2 anos sem nova interação.',
-    // 2 anos é o limite "sem interação"; sweep avalia também revogação (gracePeriodDays = 0).
-    maxActiveAgeDays: 2 * 365,
+      'Consentimento granular de marketing (Art. 11 II g). Eliminação imediata ao revogar (gracePeriodDays = 0, sem janela de retenção etária — o sweep dispara apenas via flag revoked_at). A regra de renovação obrigatória a cada 2 anos sem nova interação fica no fluxo de UX, não no sweep — exige rastreamento de last_interaction_at que não temos hoje.',
+    maxActiveAgeDays: null,
     gracePeriodDays: 0,
     legalBasis: 'LGPD Art. 8º §5º + Art. 18 IX',
   },
@@ -179,6 +178,13 @@ export const PII_TABLES: readonly PiiTableEntry[] = [
     retentionClass: 'audit_log_10y',
     anchorColumn: 'occurred_at',
     notes: 'A própria trilha é PII (carrega actor_id/subject_id). Auto-classificada como 10 anos.',
+  },
+  {
+    table: 'retention_run',
+    retentionClass: 'audit_log_10y',
+    anchorColumn: 'started_at',
+    notes:
+      'Trilha de auditoria do sweep (AGM-33). Mesma classe da audit_log: accountability operacional sob retenção própria.',
   },
 ]
 

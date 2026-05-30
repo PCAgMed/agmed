@@ -1,4 +1,4 @@
-import { index, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
+import { index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
 
 // Sentinel table from AGM-5 bootstrap — kept for migration continuity.
 export const dbReady = pgTable('_db_ready', {
@@ -72,5 +72,41 @@ export const auditLog = pgTable(
     actionIdx: index('audit_log_action_idx').on(t.action),
     occurredIdx: index('audit_log_occurred_idx').on(t.occurredAt),
     protocolIdx: index('audit_log_protocol_idx').on(t.protocol),
+  }),
+)
+
+// Trilha de auditoria do descarte por retention sweep (AGM-33). Uma linha por
+// (run, table, phase). Retenção própria: 10 anos (baseline §2 — `audit_log_10y`).
+// Esta trilha precisa sobreviver a Art. 18 IV ("excluam meus logs") — accountability
+// operacional não cai sob direito de eliminação enquanto houver base legal de
+// retenção.
+export const retentionRun = pgTable(
+  'retention_run',
+  {
+    id: text('id').primaryKey(),
+    // Agrupa todas as linhas geradas por um único disparo do sweep — útil para
+    // consultar "tudo que aconteceu na run X" e para idempotência (cron pode
+    // disparar 2x; queries usam runId p/ deduplicar).
+    runId: text('run_id').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    tableName: text('table_name').notNull(),
+    retentionClass: text('retention_class').notNull(),
+    // 'discover' = só contou, não mutou (modo dry-run ou primeira passada);
+    // 'soft'     = SET deletedAtColumn = now() em N linhas;
+    // 'hard'     = DELETE em N linhas (após gracePeriod).
+    phase: text('phase').notNull(),
+    rowsAffected: integer('rows_affected').notNull().default(0),
+    // 'cron:retention_sweep' | 'manual:<userId|systemKey>' — quem disparou.
+    actor: text('actor').notNull(),
+    // Texto curto se houve erro parcial; phase ainda completa para gravar evidência.
+    error: text('error'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+  },
+  (t) => ({
+    runIdx: index('retention_run_run_idx').on(t.runId),
+    tableIdx: index('retention_run_table_idx').on(t.tableName),
+    classIdx: index('retention_run_class_idx').on(t.retentionClass),
+    startedIdx: index('retention_run_started_idx').on(t.startedAt),
   }),
 )
