@@ -61,7 +61,7 @@ jobs:
       - run: npm run test
 
   build:
-    name: Build (next build)
+    name: Build (${{ matrix.bundler }})
     runs-on: ubuntu-latest
     # next build evaluates module-level code (Auth.js v5, drizzle client),
     # which reads these env vars. Values are CI stubs, never used in prod.
@@ -70,6 +70,19 @@ jobs:
       AUTH_URL: http://localhost:3000
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       DATABASE_URL: postgresql://clinica:password@localhost:5432/clinica_agenda
+      LEGAL_PAGES_ENABLED: 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        # Buildamos com webpack e turbopack. Eles têm trees de bundling
+        # diferentes (em particular o edge runtime) — só rodar um deixa
+        # passar regressões como AGM-42 (`Module not found: stream` em
+        # pino-abstract-transport pelo bundle do edge).
+        include:
+          - bundler: turbopack
+            script: build
+          - bundler: webpack
+            script: build:webpack
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -77,4 +90,9 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
       - run: npm ci --no-audit --no-fund
-      - run: npm run build
+      - run: npm run ${{ matrix.script }}
+      # Smoke de boot: sobe `next start` e bate /login + /legal/* (rotas
+      # que não precisam de Postgres). Sem isso o teste sob JSDOM passa
+      # mesmo com a app quebrada em produção — exatamente o que aconteceu
+      # em AGM-42.
+      - run: bash scripts/build-smoke.sh

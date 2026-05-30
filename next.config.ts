@@ -64,6 +64,19 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: 'standalone',
   productionBrowserSourceMaps: false,
+  // pino + pino-loki pull in node:stream / worker_threads / string_decoder
+  // via pino-abstract-transport. The bundler (webpack and Turbopack alike)
+  // cannot resolve those for the edge runtime, and even on the server we
+  // want them required at runtime — not traced into the build (AGM-42).
+  serverExternalPackages: [
+    'pino',
+    'pino-loki',
+    'pino-abstract-transport',
+    'pino-std-serializers',
+    'sonic-boom',
+    'thread-stream',
+    'split2',
+  ],
   async headers() {
     return [
       {

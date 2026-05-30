@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
+    "build:webpack": "next build",
     "start": "NODE_OPTIONS='--enable-source-maps' next start",
     "lint": "eslint && tsc --noEmit && tsx scripts/lgpd-lint.ts",
     "lint:eslint": "eslint",

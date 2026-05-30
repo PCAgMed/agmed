@@ -6,7 +6,11 @@ import { getAppEnv, getReleaseTag, getServiceName } from './lib/observability/en
 const { auth } = NextAuth(authConfig)
 
 const REQUEST_ID_HEADER = 'x-request-id'
-const PUBLIC_PATHS = ['/login', '/signup', '/verify-email']
+// Páginas públicas (sem sessão). `/legal/*` são documentos legais
+// servidos atrás do flag LEGAL_PAGES_ENABLED — o layout em
+// src/app/legal/layout.tsx devolve 404 quando o flag está off, então
+// não precisamos duplicar o gate aqui (AGM-42).
+const PUBLIC_PATHS = ['/login', '/signup', '/verify-email', '/legal']
 
 // Edge runtime — cannot use pino here. Emit a minimal JSON line directly
 // to stdout so Docker/Loki picks it up the same way it picks up pino lines.
