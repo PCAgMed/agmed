@@ -3,27 +3,39 @@
 //
 // O callback original vivia inline em `src/auth.ts`. Importar `@/auth` no
 // teste puxa o runtime do NextAuth (que importa `next/server`) — quebra em
-// vitest sem ambiente Next.js. Aqui ficamos só com a lógica + injeção do
-// lookup pra testabilidade direta.
+// vitest sem ambiente Next.js. Aqui ficamos só com a lógica + injeções
+// (`lookup`, `createSession`) pra testabilidade direta.
 import { getActiveMembership } from '@/lib/clinics/membership'
+import { createSession } from '@/lib/auth/sessions'
 
 export type JwtCallbackArgs = {
-  token: Record<string, unknown> & { id?: unknown; activeClinicId?: unknown }
+  token: Record<string, unknown> & { id?: unknown; jti?: unknown; activeClinicId?: unknown }
   user?: { id?: string } | null
   trigger?: 'signIn' | 'signUp' | 'update' | string
   session?: unknown
 }
 
+export type JwtCallbackDeps = {
+  lookupMembership?: typeof getActiveMembership
+  createSession?: typeof createSession
+}
+
 export async function jwtCallback(
   args: JwtCallbackArgs,
-  lookup: typeof getActiveMembership = getActiveMembership,
+  deps: JwtCallbackDeps = {},
 ): Promise<JwtCallbackArgs['token']> {
   const { token, user, trigger, session } = args
-  // 1) Sign-in: copia id do usuário pro token. activeClinicId começa null
-  //    e fica null até o cliente chamar `/api/session/active-clinic`.
-  if (user) {
+  const lookup = deps.lookupMembership ?? getActiveMembership
+  const createSess = deps.createSession ?? createSession
+
+  // 1) Sign-in: copia id do usuário pro token, gera `jti`, grava linha em
+  //    `user_sessions` para suportar revogação. `activeClinicId` começa
+  //    null e fica null até o cliente chamar `/api/session/active-clinic`.
+  if (user && user.id) {
     token.id = user.id
     token.activeClinicId = null
+    const created = await createSess({ userId: user.id })
+    token.jti = created.jti
   }
   // 2) Update trigger: o endpoint chamou `unstable_update({ activeClinicId })`.
   //    Defesa em profundidade — revalida a membership ANTES de gravar o

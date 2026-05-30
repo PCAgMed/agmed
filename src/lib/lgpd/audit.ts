@@ -15,6 +15,19 @@ export type AuditAction =
   // AGM-24 commit C — troca de clínica ativa na sessão. `success` = membership
   // validada, JWT atualizado. `denied` = sem membership ativa, JWT intacto.
   | 'session.clinic.switch'
+  // AGM-24 commit D — revalidação per-request do middleware Edge contra
+  // user_sessions + clinic_memberships. `success` ocupa a maioria dos eventos
+  // (1 por request escopo) e fica caro de gravar; emitimos apenas no caminho
+  // `denied` para alerta — bom proxy de "tentativa de uso de sessão revogada
+  // ou cross-tenant" sem inundar o audit_log. `reason` carrega o motivo
+  // estruturado: `session_revoked` | `session_expired` | `membership_revoked`
+  // | `membership_missing`.
+  | 'session.tenant.revalidate'
+  // AGM-24 commit D — logout do usuário, com revogação da sessão na tabela
+  // user_sessions. Sempre `success` (logout idempotente) — falha de DB no
+  // path de revoke é logada à parte (warn estruturado), não como audit
+  // denied, porque o JWT no cookie já foi limpo pelo NextAuth nesse ponto.
+  | 'session.logout'
 
 export type AuditOutcome = 'success' | 'denied' | 'error'
 

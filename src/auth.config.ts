@@ -3,8 +3,14 @@ import type { NextAuthConfig } from 'next-auth'
 const PUBLIC_PATHS = ['/login', '/signup', '/verify-email']
 
 // Edge-safe config used by middleware (no Node.js-only imports)
+// AGM-24 commit D — SecEng brief: "Token de curta duração (15 min)".
+// `maxAge` em segundos: JWT cookie expira em 15 min. NextAuth rota o
+// cookie a cada request via callback `jwt`, então sessões ativas se
+// renovam transparentemente; abandono ou logout = JWT vence em 15min.
+export const SESSION_MAX_AGE_SECONDS = 15 * 60
+
 export const authConfig: NextAuthConfig = {
-  session: { strategy: 'jwt' },
+  session: { strategy: 'jwt', maxAge: SESSION_MAX_AGE_SECONDS },
   pages: { signIn: '/login' },
   providers: [],
   callbacks: {

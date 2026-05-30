@@ -9,7 +9,11 @@ import { compareSync } from 'bcryptjs'
 import { dbUnscopedDangerous } from '@/lib/db'
 import { authConfig } from './auth.config'
 import { jwtCallback, type JwtCallbackArgs } from '@/lib/auth/jwt-callback'
+import { revokeSessionByJti } from '@/lib/auth/sessions'
 import { emailDomain, logAuthEvent } from '@/lib/observability/auth-events'
+import { childLogger } from '@/lib/observability/logger'
+
+const authLog = childLogger({ component: 'auth' })
 
 // TODO(next-auth-upgrade): `unstable_update` é prefixado `unstable_` por
 // design da lib. Cada upgrade de next-auth (5.x → 6.x ou minor instável)
@@ -78,20 +82,46 @@ export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
   ],
   events: {
     async signOut(message) {
-      const userId =
-        'token' in message && message.token && typeof message.token.id === 'string'
-          ? message.token.id
+      const tokenJwt =
+        'token' in message && message.token && typeof message.token === 'object'
+          ? (message.token as { id?: unknown; jti?: unknown })
           : undefined
+      const userId =
+        tokenJwt && typeof tokenJwt.id === 'string' ? tokenJwt.id : undefined
+      const jti = tokenJwt && typeof tokenJwt.jti === 'string' ? tokenJwt.jti : undefined
       logAuthEvent({ event: 'auth.signout', userId })
+
+      // AGM-24 commit D — revoga a linha em `user_sessions` para que o
+      // próximo request com este JWT (caso vaze) seja invalidado pelo
+      // middleware. Erro de DB não derruba o logout (cookie já vai sair);
+      // apenas registramos pra forense — a sessão expirará em 15min de
+      // qualquer forma.
+      if (jti) {
+        try {
+          await revokeSessionByJti(jti, 'logout')
+        } catch (err) {
+          authLog.warn(
+            { event: 'auth.signout.revoke_failed', err, userId },
+            'failed to revoke user_session row on signout; JWT cookie cleared regardless',
+          )
+        }
+      }
     },
   },
   callbacks: {
     ...authConfig.callbacks,
-    jwt: (args) => jwtCallback(args as JwtCallbackArgs),
+    jwt: async (args) => {
+      const out = await jwtCallback(args as unknown as JwtCallbackArgs)
+      return out as typeof args.token
+    },
     session({ session, token }) {
       if (token.id) session.user.id = token.id as string
       session.activeClinicId =
         typeof token.activeClinicId === 'string' ? token.activeClinicId : null
+      // jti vai pro session pra que o middleware Edge possa propagá-lo no
+      // call interno ao /api/internal/tenant-check sem precisar decodificar
+      // o JWT bruto novamente.
+      session.jti = typeof token.jti === 'string' ? token.jti : null
       return session
     },
   },

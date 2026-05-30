@@ -5,7 +5,8 @@
 // futuras silenciosamente erodem a defesa em profundidade.
 //
 // Casos cobertos:
-//  - sign-in (com `user`): id copiado + activeClinicId = null.
+//  - sign-in (com `user`): id copiado + activeClinicId = null + jti gerado
+//    via createSession (testado com mock injetado).
 //  - trigger 'update' com clinicId null: zera o claim sem chamar lookup.
 //  - trigger 'update' com clinicId UUID válido + membership ativa: claim
 //    gravado a partir do retorno do lookup (defesa: usa o clinicId do row,
@@ -18,21 +19,33 @@
 //  - trigger 'update' com candidate não-string e não-null: ignora, claim
 //    intacto (mass-assignment defense).
 import { describe, expect, it, vi } from 'vitest'
+// Importamos do módulo standalone para evitar puxar o runtime do NextAuth
+// no teste — esse é o motivo da extração feita em LOW-1.
 import { jwtCallback } from '@/lib/auth/jwt-callback'
 
 const CLINIC_A = '00000000-0000-0000-0000-00000000aaaa'
 const CLINIC_B = '00000000-0000-0000-0000-00000000bbbb'
 
+function noopCreateSession() {
+  return vi.fn(async () => ({ jti: 'jti-fake', expiresAt: new Date(Date.now() + 60_000) }))
+}
+
 describe('jwtCallback (re-validation defense in depth)', () => {
-  it('sign-in initializes token.id + activeClinicId=null', async () => {
+  it('sign-in initializes token.id + activeClinicId=null + jti from createSession', async () => {
     const lookup = vi.fn(async () => null)
+    const createSession = vi.fn(async (input: { userId: string }) => ({
+      jti: `jti-for-${input.userId}`,
+      expiresAt: new Date(Date.now() + 900_000),
+    }))
     const token: Record<string, unknown> = {}
     const out = await jwtCallback(
       { token, user: { id: 'prof-1' }, trigger: 'signIn' },
-      lookup,
+      { lookupMembership: lookup, createSession },
     )
     expect(out.id).toBe('prof-1')
     expect(out.activeClinicId).toBeNull()
+    expect(out.jti).toBe('jti-for-prof-1')
+    expect(createSession).toHaveBeenCalledWith({ userId: 'prof-1' })
     expect(lookup).not.toHaveBeenCalled()
   })
 
@@ -41,7 +54,7 @@ describe('jwtCallback (re-validation defense in depth)', () => {
     const token = { id: 'prof-1', activeClinicId: CLINIC_A }
     const out = await jwtCallback(
       { token, trigger: 'update', session: { activeClinicId: null } },
-      lookup,
+      { lookupMembership: lookup, createSession: noopCreateSession() },
     )
     expect(out.activeClinicId).toBeNull()
     expect(lookup).not.toHaveBeenCalled()
@@ -57,7 +70,7 @@ describe('jwtCallback (re-validation defense in depth)', () => {
     const token = { id: 'prof-1' }
     const out = await jwtCallback(
       { token, trigger: 'update', session: { activeClinicId: CLINIC_A } },
-      lookup,
+      { lookupMembership: lookup, createSession: noopCreateSession() },
     )
     expect(lookup).toHaveBeenCalledWith('prof-1', CLINIC_A)
     expect(out.activeClinicId).toBe(CLINIC_A)
@@ -76,7 +89,7 @@ describe('jwtCallback (re-validation defense in depth)', () => {
     const token = { id: 'prof-1' }
     const out = await jwtCallback(
       { token, trigger: 'update', session: { activeClinicId: CLINIC_A } },
-      lookup,
+      { lookupMembership: lookup, createSession: noopCreateSession() },
     )
     expect(out.activeClinicId).toBe(CLINIC_B)
   })
@@ -86,7 +99,7 @@ describe('jwtCallback (re-validation defense in depth)', () => {
     const token = { id: 'prof-1', activeClinicId: CLINIC_B }
     const out = await jwtCallback(
       { token, trigger: 'update', session: { activeClinicId: CLINIC_A } },
-      lookup,
+      { lookupMembership: lookup, createSession: noopCreateSession() },
     )
     expect(lookup).toHaveBeenCalledWith('prof-1', CLINIC_A)
     // Claim NÃO foi alterado — endpoint já respondeu 403; aqui só protege
@@ -99,7 +112,7 @@ describe('jwtCallback (re-validation defense in depth)', () => {
     const token: Record<string, unknown> = { activeClinicId: CLINIC_A }
     const out = await jwtCallback(
       { token, trigger: 'update', session: { activeClinicId: CLINIC_A } },
-      lookup,
+      { lookupMembership: lookup, createSession: noopCreateSession() },
     )
     expect(lookup).not.toHaveBeenCalled()
     expect(out.activeClinicId).toBe(CLINIC_A)
@@ -110,7 +123,7 @@ describe('jwtCallback (re-validation defense in depth)', () => {
     const token = { id: 'prof-1', activeClinicId: CLINIC_A }
     const out = await jwtCallback(
       { token, trigger: 'signIn', session: { activeClinicId: CLINIC_B } },
-      lookup,
+      { lookupMembership: lookup, createSession: noopCreateSession() },
     )
     expect(lookup).not.toHaveBeenCalled()
     expect(out.activeClinicId).toBe(CLINIC_A)
@@ -125,7 +138,7 @@ describe('jwtCallback (re-validation defense in depth)', () => {
       lookup.mockClear()
       const out = await jwtCallback(
         { token, trigger: 'update', session: { activeClinicId: bad } },
-        lookup,
+        { lookupMembership: lookup, createSession: noopCreateSession() },
       )
       expect(lookup).not.toHaveBeenCalled()
       expect(out.activeClinicId).toBe(CLINIC_A)
@@ -139,7 +152,7 @@ describe('jwtCallback (re-validation defense in depth)', () => {
       lookup.mockClear()
       const out = await jwtCallback(
         { token, trigger: 'update', session: bad },
-        lookup,
+        { lookupMembership: lookup, createSession: noopCreateSession() },
       )
       expect(lookup).not.toHaveBeenCalled()
       expect(out.activeClinicId).toBe(CLINIC_A)
