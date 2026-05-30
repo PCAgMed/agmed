@@ -1,36 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Clínica Agenda
 
-## Getting Started
+Software de Controle de Agendamentos para Clínicas Médias — a Brazilian SaaS that helps small-to-medium medical clinics (5–50 staff) schedule appointments, send WhatsApp reminders, manage doctor calendars across rooms and services, and handle basic billing with PIX, all in pt-BR and built for LGPD compliance from day one.
 
-First, run the development server:
+## Stack
+
+- **Framework**: Next.js 15 (App Router) + TypeScript
+- **UI**: Tailwind CSS + shadcn/ui
+- **Database**: PostgreSQL 17 (Docker)
+- **Auth**: Auth.js v5 (NextAuth) with PostgreSQL adapter
+- **Observability**: Grafana + Loki + Prometheus (Docker Compose)
+
+## Local dev quickstart
 
 ```bash
+cp .env.example .env.local   # fill in AUTH_SECRET (openssl rand -base64 32)
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+App runs at http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Commands
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Command             | What it does                  |
+| ------------------- | ----------------------------- |
+| `npm run dev`       | Start dev server (Turbopack)  |
+| `npm run lint`      | ESLint + TypeScript typecheck |
+| `npm run typecheck` | TypeScript only               |
+| `npm run format`    | Prettier write                |
+| `npm test`          | Run tests (Vitest)            |
+| `npm run build`     | Production build              |
