@@ -15,6 +15,13 @@
       "when": 1780149888748,
       "tag": "0001_auth_users",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780156296638,
+      "tag": "0002_lgpd_rights",
+      "breakpoints": true
     }
   ]
 }
