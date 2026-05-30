@@ -41,8 +41,9 @@ function buildStreams(): StreamEntry[] {
     // swallowed so a Loki outage cannot affect request handling.
     const lokiStream = pinoLoki({
       host: lokiUrl,
-      batching: true,
-      interval: 2,
+      // Batch pushes to Loki on a 2s interval (better-than-per-line throughput,
+      // bounded loss on crash). interval is in seconds.
+      batching: { interval: 2 },
       // pino-loki defaults to reading `log.time`. Our isoTime stamp is not
       // a nanosecond number, so let pino-loki replace it at push time.
       replaceTimestamp: true,
