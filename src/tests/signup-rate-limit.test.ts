@@ -3,7 +3,7 @@ import { InMemoryFixedWindowStore, setDefaultStore } from '@/lib/rate-limit/stor
 
 vi.mock('@/lib/db', () => {
   const query = vi.fn().mockResolvedValue({ rows: [] })
-  return { getPool: () => ({ query }), __query: query }
+  return { dbUnscopedDangerous: () => ({ query }), __query: query }
 })
 
 // Pino-loki tries to connect on import; silence stdout noise during tests
@@ -49,7 +49,7 @@ describe('POST /api/auth/signup hardening', () => {
 
   it('returns the same uniform 200 when the email already exists', async () => {
     const db = await import('@/lib/db')
-    const pool = db.getPool() as unknown as { query: ReturnType<typeof vi.fn> }
+    const pool = db.dbUnscopedDangerous() as unknown as { query: ReturnType<typeof vi.fn> }
     pool.query.mockResolvedValueOnce({ rows: [{ id: 'taken' }] })
 
     const { POST } = await import('@/app/api/auth/signup/route')

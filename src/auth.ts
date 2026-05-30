@@ -1,7 +1,11 @@
 import NextAuth from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import { compareSync } from 'bcryptjs'
-import { getPool } from '@/lib/db'
+// AGM-24: o lookup por e-mail no login é cross-clinic — não temos clínica
+// ativa ANTES de autenticar. Uso legítimo de `dbUnscopedDangerous`. A clínica
+// ativa é resolvida depois pelo middleware do commit C, a partir das
+// memberships do usuário.
+import { dbUnscopedDangerous } from '@/lib/db'
 import { authConfig } from './auth.config'
 import { emailDomain, logAuthEvent } from '@/lib/observability/auth-events'
 
@@ -24,7 +28,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const domain = emailDomain(email)
         logAuthEvent({ event: 'auth.signin.attempt', emailDomain: domain })
 
-        const pool = getPool()
+        const pool = dbUnscopedDangerous()
         const result = await pool.query<{
           id: string
           name: string | null

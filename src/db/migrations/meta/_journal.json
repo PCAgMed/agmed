@@ -36,6 +36,13 @@
       "when": 1780160468959,
       "tag": "0004_multitenancy",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780162000000,
+      "tag": "0005_rls",
+      "breakpoints": true
     }
   ]
 }

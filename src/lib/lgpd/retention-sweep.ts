@@ -16,7 +16,7 @@
 
 import { randomUUID } from 'crypto'
 import type { Pool, PoolClient } from 'pg'
-import { getPool } from '@/lib/db'
+import { withRowSecurityOff } from '@/lib/db'
 import { childLogger } from '@/lib/observability/logger'
 import { PII_TABLES, RETENTION_POLICIES, type PiiTableEntry, type RetentionClass } from './retention'
 
@@ -43,7 +43,9 @@ export interface RunRetentionSweepOptions {
   tables?: readonly PiiTableEntry[]
   /**
    * Injeta um Pool pg específico (para testes com pool dedicado). Default:
-   * o pool compartilhado de `@/lib/db`.
+   * o pool compartilhado de `dbUnscopedDangerous()`. AGM-24: passar um pool
+   * customizado é cross-clinic por design — chamadas em prod usam o helper
+   * `withRowSecurityOff` para desligar RLS na transação.
    */
   pool?: Pool
 }
@@ -80,13 +82,37 @@ export async function runRetentionSweep(
   const actor = opts.actor?.kind ?? 'cron:retention_sweep'
   const now = opts.now ?? new Date()
   const tables = opts.tables ?? PII_TABLES
-  const pool = opts.pool ?? getPool()
   const runId = randomUUID()
   const startedAt = new Date()
 
-  const phases: TablePhaseResult[] = []
   log.info({ event: 'retention.sweep.start', runId, dryRun, tables: tables.length }, 'retention sweep started')
 
+  // AGM-24: sweep precisa atravessar a fronteira de tenant em LEITURA E ESCRITA
+  // (auditoria de retenção é sobre todas as clínicas). Em produção, usa
+  // `withRowSecurityOff` para abrir uma transação com RLS desligada. Testes
+  // que injetam `opts.pool` controlam RLS por conta própria (DB de teste sem
+  // policy aplicada ou usando role de owner).
+  if (opts.pool) {
+    const phases = await sweepTables(opts.pool, tables, dryRun, now, runId, startedAt, actor)
+    return finalize(runId, startedAt, dryRun, actor, phases)
+  }
+
+  return await withRowSecurityOff(async (client) => {
+    const phases = await sweepTables(client, tables, dryRun, now, runId, startedAt, actor)
+    return finalize(runId, startedAt, dryRun, actor, phases)
+  })
+}
+
+async function sweepTables(
+  pool: Pool | PoolClient,
+  tables: readonly PiiTableEntry[],
+  dryRun: boolean,
+  now: Date,
+  runId: string,
+  startedAt: Date,
+  actor: string,
+): Promise<TablePhaseResult[]> {
+  const phases: TablePhaseResult[] = []
   for (const entry of tables) {
     try {
       // Sempre faz discover (cheap COUNT) — útil mesmo em modo normal pra ter
@@ -140,7 +166,16 @@ export async function runRetentionSweep(
       await recordPhase(pool, runId, startedAt, actor, entry, 'discover', 0, message)
     }
   }
+  return phases
+}
 
+function finalize(
+  runId: string,
+  startedAt: Date,
+  dryRun: boolean,
+  actor: string,
+  phases: TablePhaseResult[],
+): SweepResult {
   const endedAt = new Date()
   const totals = phases.reduce(
     (acc, p) => {
@@ -313,8 +348,20 @@ export interface PendingDisposalMetric {
 export async function collectPendingDisposalMetrics(
   opts: { now?: Date; pool?: Pool } = {},
 ): Promise<PendingDisposalMetric[]> {
-  const pool = opts.pool ?? getPool()
   const now = opts.now ?? new Date()
+  // AGM-24: a coleta de métricas atravessa todos os tenants (é métrica
+  // operacional global). Em prod desliga RLS na transação; em teste, usa o
+  // pool injetado.
+  if (opts.pool) {
+    return collectMetrics(opts.pool, now)
+  }
+  return await withRowSecurityOff((client) => collectMetrics(client, now))
+}
+
+async function collectMetrics(
+  pool: Pool | PoolClient,
+  now: Date,
+): Promise<PendingDisposalMetric[]> {
   const out: PendingDisposalMetric[] = []
   for (const entry of PII_TABLES) {
     const clause = buildDiscoveryWhere(entry, '$1')

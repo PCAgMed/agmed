@@ -1,5 +1,12 @@
 import { randomUUID } from 'crypto'
-import { getPool } from '@/lib/db'
+import { dbUnscopedDangerous } from '@/lib/db'
+
+// AGM-24: enquanto `subject_type='professional'`, consents vivem com
+// `clinic_id IS NULL` (consentimento dado à plataforma, não a uma clínica
+// específica). Quando AGM-39 introduzir consent de paciente, este módulo
+// ganha um par com `withClinicScope` — `listConsents` continua aqui (uso
+// system-level pelo profissional na sua própria conta), `listPatientConsents`
+// vira novo helper escopado.
 
 // Catálogo de tipos de consentimento ativos no produto. Toda nova chave deve
 // vir acompanhada de revisão do lgpd-baseline §1 e da página /legal/privacidade.
@@ -46,7 +53,7 @@ export async function listConsents(
   subjectType: string,
   subjectId: string,
 ): Promise<ConsentRecord[]> {
-  const pool = getPool()
+  const pool = dbUnscopedDangerous()
   const { rows } = await pool.query<ConsentRow>(
     'SELECT * FROM consents WHERE subject_type = $1 AND subject_id = $2',
     [subjectType, subjectId],
@@ -61,7 +68,7 @@ export async function revokeConsent(
   subjectId: string,
   kind: ConsentKind,
 ): Promise<{ changed: boolean; record: ConsentRecord | null }> {
-  const pool = getPool()
+  const pool = dbUnscopedDangerous()
   const { rows } = await pool.query<ConsentRow>(
     `UPDATE consents
      SET revoked_at = now(), updated_at = now()
@@ -89,7 +96,7 @@ export async function grantConsent(input: {
   sourceIp?: string | null
   userAgent?: string | null
 }): Promise<ConsentRecord> {
-  const pool = getPool()
+  const pool = dbUnscopedDangerous()
   const { rows } = await pool.query<ConsentRow>(
     `INSERT INTO consents
        (id, subject_type, subject_id, kind, policy_version, source_ip, user_agent)

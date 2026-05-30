@@ -20,7 +20,7 @@ vi.mock('@/lib/observability/logger', () => ({
 
 type QueryFn = (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }>
 const queryMock = vi.fn<QueryFn>(async () => ({ rows: [] }))
-vi.mock('@/lib/db', () => ({ getPool: () => ({ query: queryMock }) }))
+vi.mock('@/lib/db', () => ({ dbUnscopedDangerous: () => ({ query: queryMock }) }))
 
 function buildRequest(url: string, init?: RequestInit): Request {
   return new Request(url, {

@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import { hashSync } from 'bcryptjs'
 import { randomUUID } from 'crypto'
-import { getPool } from '@/lib/db'
+// AGM-24: signup ocorre ANTES de a conta ter qualquer clínica. Lookup por
+// e-mail em `users` é cross-clinic por natureza — uso legítimo de
+// `dbUnscopedDangerous`.
+import { dbUnscopedDangerous } from '@/lib/db'
 import { emailDomain, logAuthEvent } from '@/lib/observability/auth-events'
 import { childLogger } from '@/lib/observability/logger'
 import { logRateLimitBlock, rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
@@ -70,7 +73,7 @@ export async function POST(req: Request) {
     return rateLimitedResponse({ retryAfterSec: emailResult.retryAfterSec })
   }
 
-  const pool = getPool()
+  const pool = dbUnscopedDangerous()
   const existing = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail])
   if (existing.rows.length > 0) {
     // Log distinguishes the case for ops, but the HTTP response stays uniform

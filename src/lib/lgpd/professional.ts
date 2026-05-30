@@ -1,4 +1,8 @@
-import { getPool } from '@/lib/db'
+// AGM-24: `users` é tabela cross-clinic (profissional pode ter membership em
+// várias clínicas), então estas leituras vivem em `dbUnscopedDangerous`.
+// Quando AGM-39 adicionar dados de paciente, eles ficam em outra família de
+// helpers escopados por `withClinicScope`.
+import { dbUnscopedDangerous } from '@/lib/db'
 import { listConsents, type ConsentRecord } from './consents'
 
 export interface ProfessionalProfile {
@@ -24,7 +28,7 @@ interface ProfessionalRow {
 }
 
 export async function getProfessionalProfile(id: string): Promise<ProfessionalProfile | null> {
-  const pool = getPool()
+  const pool = dbUnscopedDangerous()
   const { rows } = await pool.query<ProfessionalRow>(
     `SELECT id, name, email, "emailVerified", image, created_at, deleted_at, deletion_requested_at
      FROM users WHERE id = $1`,
@@ -70,7 +74,7 @@ export async function updateProfessionalProfile(
   if (fields.length === 0) return getProfessionalProfile(id)
 
   values.push(id)
-  const pool = getPool()
+  const pool = dbUnscopedDangerous()
   await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = $${i}`, values)
   return getProfessionalProfile(id)
 }
@@ -78,7 +82,7 @@ export async function updateProfessionalProfile(
 // Marca o pedido de eliminação. O hard-delete é executado pelo job da AGM-33
 // após `grace_period` (30 dias, conforme baseline §2). Idempotente.
 export async function requestProfessionalDeletion(id: string): Promise<Date> {
-  const pool = getPool()
+  const pool = dbUnscopedDangerous()
   const { rows } = await pool.query<{ deletion_requested_at: Date }>(
     `UPDATE users
      SET deletion_requested_at = COALESCE(deletion_requested_at, now())

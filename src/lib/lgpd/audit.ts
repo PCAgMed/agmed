@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { getPool } from '@/lib/db'
+import { dbUnscopedDangerous } from '@/lib/db'
 import { childLogger } from '@/lib/observability/logger'
 
 // Subset of Art. 18 + Art. 9 ações que esta tabela registra. Mantido como
@@ -38,9 +38,13 @@ const log = childLogger({ component: 'lgpd.audit' })
 // de banco vira log estruturado e é alertada via Loki, mas não derruba o
 // fluxo do titular (o pedido em si pode ter sucesso e a falha de auditoria
 // é tratada como incidente operacional).
+// AGM-24: recordAudit escreve com `clinic_id IS NULL` por enquanto — todos
+// os eventos atuais (signup, rights.access do profissional, sweep) são
+// system-level. Quando AGM-39 adicionar fluxos de paciente, este helper ganha
+// um parâmetro `clinicId` e a chamada migra para `withClinicScope`.
 export async function recordAudit(input: RecordAuditInput): Promise<void> {
   const id = randomUUID()
-  const pool = getPool()
+  const pool = dbUnscopedDangerous()
   try {
     await pool.query(
       `INSERT INTO audit_log
