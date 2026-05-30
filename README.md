@@ -1,5 +1,7 @@
 # Clínica Agenda
 
+[![CI](https://github.com/PCAgMed/agmed/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/PCAgMed/agmed/actions/workflows/ci.yml)
+
 Software de Controle de Agendamentos para Clínicas Médias — a Brazilian SaaS that helps small-to-medium medical clinics (5–50 staff) schedule appointments, send WhatsApp reminders, manage doctor calendars across rooms and services, and handle basic billing with PIX, all in pt-BR and built for LGPD compliance from day one.
 
 ## Stack
