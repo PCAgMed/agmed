@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-progress runs on the same ref when a new commit is pushed,
+# so a force-push or quick follow-up doesn't waste CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (eslint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint:eslint
+
+  typecheck:
+    name: Typecheck (tsc --noEmit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+
+  test:
+    name: Test (vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run test
+
+  build:
+    name: Build (next build)
+    runs-on: ubuntu-latest
+    # next build evaluates module-level code (Auth.js v5, drizzle client),
+    # which reads these env vars. Values are CI stubs, never used in prod.
+    env:
+      AUTH_SECRET: ci-stub-secret-do-not-use-in-prod
+      AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      DATABASE_URL: postgresql://clinica:password@localhost:5432/clinica_agenda
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
