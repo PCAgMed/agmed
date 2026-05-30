@@ -1,0 +1,19 @@
+# Minimal local-dev Postgres for auth testing.
+# Spin up: docker compose -f docker-compose.local.yml up -d
+# Apply schema: docker compose -f docker-compose.local.yml exec db psql -U clinica -d clinica_agenda -f /docker-entrypoint-initdb.d/auth-schema.sql
+# Tear down: docker compose -f docker-compose.local.yml down -v
+version: '3.9'
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: clinica
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: clinica_agenda
+    ports:
+      - '5432:5432'
+    volumes:
+      - pg_data_local:/var/lib/postgresql/data
+      - ./scripts/auth-schema.sql:/docker-entrypoint-initdb.d/auth-schema.sql
+volumes:
+  pg_data_local:
