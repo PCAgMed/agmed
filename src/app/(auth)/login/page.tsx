@@ -5,10 +5,12 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useState } from 'react'
 
+import { safeCallback } from '@/lib/safe-redirect'
+
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') ?? '/dashboard'
+  const callbackUrl = safeCallback(searchParams.get('callbackUrl'))
 
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
